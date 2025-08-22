@@ -56,7 +56,7 @@ export default function VehicleAnimation() {
     const pathLayer = new LineLayer({
         id: 'path',
         data: [vehiclePath],
-        getPath: d => d.map(point => [point.longitude, point.latitude]),
+        getPath: (d: any) => d.map((point: any) => [point.longitude, point.latitude]),
         getColor: [100, 100, 100], // 灰色路径
         getWidth: 3,
         opacity: 0.6,
@@ -83,8 +83,8 @@ export default function VehicleAnimation() {
     const lineLayer = new PathLayer({
         id: 'PathLayer',
         data: [vehiclePath],
-        getColor: d => [0, 100, 255],
-        getPath: d => d.map(point => [point.longitude, point.latitude]),
+        getColor: (d: any) => [0, 100, 255],
+        getPath: (d: any) => d.map((point: any) => [point.longitude, point.latitude]),
         getWidth: 100,
         pickable: true
     });
