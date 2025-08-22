@@ -7,7 +7,7 @@ export const METRO_API_CONFIG = {
     allowedOrigins: [
         'http://localhost:3000',
         'https://localhost:3000',
-        // 添加您的生产环境域名
+        'https://zhangshuming-metro.vercel.app'
     ],
     
     // 请求频率限制
