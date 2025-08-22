@@ -36,6 +36,18 @@ export default class Metro {
         intervals: any;
         dayOfWeek: number;
     }> = [];
+    
+    // 标签显示层级配置
+    private labelDisplayConfig = {
+        stationLabels: {
+            minZoom: 10,  // 站点标签显示的最小缩放级别
+            enabled: true
+        },
+        vehicleLabels: {
+            minZoom: 11,  // 列车标签显示的最小缩放级别
+            enabled: true
+        }
+    };
     constructor() {
         this.init();
     }
@@ -205,61 +217,77 @@ export default class Metro {
     }
 
     private async getStationTimeInterval(): Promise<void> {
-        const data = await fetchMetroData('intervals');
+        try {
+            console.log('开始获取发车间隔数据...');
+            const data = await fetchMetroData('intervals');
+            console.log('获取到的发车间隔数据:', data);
 
-        //先找出所有线路中最长的线路
-        let newSchedule: { [key: string]: any } = {};
-        this.schedule.forEach((line: any) => {
-            if (!newSchedule[line.lineNo]) {
-                newSchedule[line.lineNo] = line;
+            if (!data || !Array.isArray(data)) {
+                console.error('发车间隔数据格式错误:', data);
+                return;
             }
-            if (line.timetables.length > newSchedule[line.lineNo].timetables.length && line.direction == 1) {
-                newSchedule[line.lineNo] = line;
-            }
-        })
-        data.forEach((d: any) => {
-            Object.values(newSchedule).forEach((ld: any) => {
-                if (d.line === ld.lineNo) {
-                    d.interval.forEach((di: any) => {
-                        for (let interval in di.range_interval) {
-                            //补齐时间为字符串的数据
-                            if (typeof di.range_interval[interval] == 'string') {
-                                let time = di.range_interval[interval];
-                                di.range_interval[interval] = [{
-                                    station_range: [ld.timetables[0].name, ld.timetables[ld.timetables.length - 1].name],
-                                    time
-                                }]
-                            }
 
-                            //补齐只有“过去”没有"回来"的数据
-                            di.range_interval[interval].forEach((range_time: any) => {
-                                let range = range_time.station_range;
-                                let reverseRange = di.range_interval[interval].find((ri: any) => {
-                                    let range1 = ri.station_range;
-                                    return range1[0] === range[1] && range1[1] === range[0];
-                                })
-                                if (!reverseRange) {
-                                    di.range_interval[interval].push({
-                                        station_range: [range[1], range[0]],
-                                        time: range_time.time
-                                    })
-                                }
-                            })
-                            if (di.range.indexOf(new Date().getDay()) > 0) {
-                                this.lineUpdateTimes.push({
-                                    line: d.line,
-                                    time: interval,
-                                })
-                            }
-
-                        }
-                    })
+            //先找出所有线路中最长的线路
+            let newSchedule: { [key: string]: any } = {};
+            this.schedule.forEach((line: any) => {
+                if (!newSchedule[line.lineNo]) {
+                    newSchedule[line.lineNo] = line;
+                }
+                if (line.timetables.length > newSchedule[line.lineNo].timetables.length && line.direction == 1) {
+                    newSchedule[line.lineNo] = line;
                 }
             })
+            
+            console.log('处理后的时刻表数据:', newSchedule);
+            
+            data.forEach((d: any) => {
+                Object.values(newSchedule).forEach((ld: any) => {
+                    if (d.line === ld.lineNo) {
+                        d.interval.forEach((di: any) => {
+                            for (let interval in di.range_interval) {
+                                //补齐时间为字符串的数据
+                                if (typeof di.range_interval[interval] == 'string') {
+                                    let time = di.range_interval[interval];
+                                    di.range_interval[interval] = [{
+                                        station_range: [ld.timetables[0].name, ld.timetables[ld.timetables.length - 1].name],
+                                        time
+                                    }]
+                                }
 
+                                //补齐只有"过去"没有"回来"的数据
+                                di.range_interval[interval].forEach((range_time: any) => {
+                                    let range = range_time.station_range;
+                                    let reverseRange = di.range_interval[interval].find((ri: any) => {
+                                        let range1 = ri.station_range;
+                                        return range1[0] === range[1] && range1[1] === range[0];
+                                    })
+                                    if (!reverseRange) {
+                                        di.range_interval[interval].push({
+                                            station_range: [range[1], range[0]],
+                                            time: range_time.time
+                                        })
+                                    }
+                                })
+                                if (di.range.indexOf(new Date().getDay()) > 0) {
+                                    this.lineUpdateTimes.push({
+                                        line: d.line,
+                                        time: interval,
+                                    })
+                                }
 
-        })
-        this.stationTimeInterval = data;
+                            }
+                        })
+                    }
+                })
+            })
+            
+            this.stationTimeInterval = data;
+            console.log('发车间隔数据处理完成，数据量:', this.stationTimeInterval.length);
+        } catch (error) {
+            console.error('获取发车间隔数据失败:', error);
+            // 设置默认数据，避免界面显示异常
+            this.stationTimeInterval = [];
+        }
     }
 
     animateSpeedReload(lineTime: any): void {
@@ -270,37 +298,53 @@ export default class Metro {
     }
 
     private initStationTimeInterval(): void {
+        try {
+            console.log('开始初始化发车间隔数据...');
+            console.log('当前stationTimeInterval数据:', this.stationTimeInterval);
 
-        const today = new Date().getDay();
-        const dayOfWeek = today === 0 ? 7 : today;
-
-
-        // 清空之前的数据
-        this.lineIntervals = [];
-
-        // 处理每条地铁线的发车间隔数据
-        this.stationTimeInterval.forEach((lineData: any) => {
-            const lineNo = lineData.line;
-            const intervals = lineData.interval;
-
-            // 找到匹配今天周几的interval配置
-            const todayInterval = intervals.find((interval: any) =>
-                interval.range.includes(dayOfWeek)
-            );
-
-            if (todayInterval) {
-                // 存储整理后的数据用于界面展示
-                this.lineIntervals.push({
-                    lineNo: lineNo,
-                    intervals: todayInterval.range_interval,
-                    dayOfWeek: dayOfWeek
-                });
-            } else {
-                console.warn(`线路${lineNo}没有找到周${dayOfWeek}的发车间隔配置`);
+            if (!this.stationTimeInterval || !Array.isArray(this.stationTimeInterval)) {
+                console.warn('发车间隔数据为空，无法初始化');
+                this.lineIntervals = [];
+                return;
             }
-        });
 
+            const today = new Date().getDay();
+            const dayOfWeek = today === 0 ? 7 : today;
+            console.log('今天是周几:', dayOfWeek);
 
+            // 清空之前的数据
+            this.lineIntervals = [];
+
+            // 处理每条地铁线的发车间隔数据
+            this.stationTimeInterval.forEach((lineData: any) => {
+                const lineNo = lineData.line;
+                const intervals = lineData.interval;
+                console.log(`处理线路${lineNo}的发车间隔数据:`, intervals);
+
+                // 找到匹配今天周几的interval配置
+                const todayInterval = intervals.find((interval: any) =>
+                    interval.range.includes(dayOfWeek)
+                );
+
+                if (todayInterval) {
+                    console.log(`线路${lineNo}找到周${dayOfWeek}的配置:`, todayInterval);
+                    // 存储整理后的数据用于界面展示
+                    this.lineIntervals.push({
+                        lineNo: lineNo,
+                        intervals: todayInterval.range_interval,
+                        dayOfWeek: dayOfWeek
+                    });
+                } else {
+                    console.warn(`线路${lineNo}没有找到周${dayOfWeek}的发车间隔配置`);
+                }
+            });
+
+            console.log('初始化完成，lineIntervals数据量:', this.lineIntervals.length);
+            console.log('lineIntervals数据:', this.lineIntervals);
+        } catch (error) {
+            console.error('初始化发车间隔数据失败:', error);
+            this.lineIntervals = [];
+        }
     }
 
     private processData(data: any[]): void {
@@ -354,7 +398,9 @@ export default class Metro {
 
     // 根据缩放级别返回基础图层（控制站名是否显示）
     public getBaseLayersForZoom(zoom: number): any[] {
-        const showStationText = true;
+        const showStationText = typeof zoom === 'number' ? 
+            (zoom >= this.labelDisplayConfig.stationLabels.minZoom && this.labelDisplayConfig.stationLabels.enabled) : 
+            this.labelDisplayConfig.stationLabels.enabled;
         return [
             new StationLayer({
                 id: 'unified-stations',
@@ -398,6 +444,48 @@ export default class Metro {
             }
         }
         return colorMap;
+    }
+
+    /**
+     * 配置标签显示层级
+     * @param config 标签显示配置
+     */
+    public configureLabelDisplay(config: {
+        stationLabels?: {
+            minZoom?: number;
+            enabled?: boolean;
+        };
+        vehicleLabels?: {
+            minZoom?: number;
+            enabled?: boolean;
+        };
+    }): void {
+        if (config.stationLabels) {
+            if (typeof config.stationLabels.minZoom === 'number') {
+                this.labelDisplayConfig.stationLabels.minZoom = config.stationLabels.minZoom;
+            }
+            if (typeof config.stationLabels.enabled === 'boolean') {
+                this.labelDisplayConfig.stationLabels.enabled = config.stationLabels.enabled;
+            }
+        }
+        
+        if (config.vehicleLabels) {
+            if (typeof config.vehicleLabels.minZoom === 'number') {
+                this.labelDisplayConfig.vehicleLabels.minZoom = config.vehicleLabels.minZoom;
+            }
+            if (typeof config.vehicleLabels.enabled === 'boolean') {
+                this.labelDisplayConfig.vehicleLabels.enabled = config.vehicleLabels.enabled;
+            }
+        }
+        
+        console.log('标签显示配置已更新:', this.labelDisplayConfig);
+    }
+
+    /**
+     * 获取当前标签显示配置
+     */
+    public getLabelDisplayConfig(): any {
+        return { ...this.labelDisplayConfig };
     }
 
 
@@ -608,7 +696,9 @@ export default class Metro {
         const layers: any[] = [];
         const vehiclePolygons: Array<{ polygon: [number, number][], color: [number, number, number, number] }> = [];
         const vehicleLabels: Array<{ position: [number, number], text: string, color: [number, number, number, number] }> = [];
-        const showVehicleLabels = typeof zoom === 'number' ? (zoom >= 13) : false;
+        const showVehicleLabels = typeof zoom === 'number' ? 
+            (zoom >= this.labelDisplayConfig.vehicleLabels.minZoom && this.labelDisplayConfig.vehicleLabels.enabled) : 
+            this.labelDisplayConfig.vehicleLabels.enabled;
         const labelOccupied = new Set<string>();
 
         for (const metrics of this.allLineAnimMetrics) {

@@ -61,6 +61,7 @@ export default function MetroControl() {
     const [isLoading, setIsLoading] = React.useState(true);
     const [layers, setLayers] = React.useState<any[]>([]);
     const [lineIntervals, setLineIntervals] = React.useState<any[]>([]);
+    const [intervalsLoading, setIntervalsLoading] = React.useState(true);
     // 动画进度（0-1 循环）或时间驱动，rAF 句柄，静态基础图层缓存
     const progressRef = React.useRef<number>(0);
     const startTimeRef = React.useRef<number | null>(null);
@@ -99,12 +100,33 @@ export default function MetroControl() {
                 baseLayersRef.current = metroInstance.getBaseLayersForZoom(zoomRef.current);
                 setLayers(baseLayersRef.current);
                 // 获取发车间隔数据
-                setTimeout(function () {
-                    setLineIntervals(metroInstance.getLineIntervals());
-
-
-
-                }, 1000)
+                const loadIntervals = () => {
+                    setIntervalsLoading(true);
+                    console.log('开始获取发车间隔数据...');
+                    const intervals = metroInstance.getLineIntervals();
+                    console.log('获取到的发车间隔数据:', intervals);
+                    setLineIntervals(intervals);
+                    setIntervalsLoading(false);
+                    
+                    if (!intervals || intervals.length === 0) {
+                        console.warn('发车间隔数据为空，可能的原因：');
+                        console.warn('1. API调用失败');
+                        console.warn('2. 数据格式错误');
+                        console.warn('3. 网络问题');
+                        
+                        // 如果数据为空，5秒后重试
+                        setTimeout(() => {
+                            console.log('重试获取发车间隔数据...');
+                            setIntervalsLoading(true);
+                            const retryIntervals = metroInstance.getLineIntervals();
+                            setLineIntervals(retryIntervals);
+                            setIntervalsLoading(false);
+                        }, 5000);
+                    }
+                };
+                
+                // 延迟1秒后首次加载
+                setTimeout(loadIntervals, 1000);
 
                 function reloadLineTime(){
                     const now = new Date();
@@ -278,33 +300,207 @@ export default function MetroControl() {
                 fontFamily: 'monospace',
                 zIndex: 1000
             }}>
-                <h3 style={{ margin: '0 0 10px 0', fontSize: '14px' }}>
-                    今日发车间隔 (周{lineIntervals[0]?.dayOfWeek || '?'})
-                </h3>
-                {lineIntervals.map((line, index) => (
-                    <div key={index} style={{ marginBottom: '10px', borderBottom: '1px solid #333', paddingBottom: '5px' }}>
-                        <div style={{ fontWeight: 'bold', color: (lineColorMap[Number(line.lineNo)] || '#4CAF50') }}>
-                            {formatLineName(line.lineNo)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <h3 style={{ margin: '0', fontSize: '14px' }}>
+                        今日发车间隔 (周{lineIntervals[0]?.dayOfWeek || '?'})
+                    </h3>
+                    <button 
+                        onClick={() => {
+                            if (metro) {
+                                setIntervalsLoading(true);
+                                const intervals = metro.getLineIntervals();
+                                setLineIntervals(intervals);
+                                setIntervalsLoading(false);
+                                console.log('手动刷新发车间隔数据:', intervals);
+                            }
+                        }}
+                        style={{
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            color: 'white',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseOver={(e) => (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.2)'}
+                        onMouseOut={(e) => (e.target as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)'}
+                    >
+                        {intervalsLoading ? '⏳ 加载中...' : '刷新'}
+                    </button>
+                </div>
+                {lineIntervals && lineIntervals.length > 0 ? (
+                    lineIntervals.map((line, index) => (
+                        <div key={index} style={{ marginBottom: '10px', borderBottom: '1px solid #333', paddingBottom: '5px' }}>
+                            <div style={{ fontWeight: 'bold', color: (lineColorMap[Number(line.lineNo)] || '#4CAF50') }}>
+                                {formatLineName(line.lineNo)}
+                            </div>
+                            <div style={{ marginTop: '5px' }}>
+                                {Object.entries(line.intervals).map(([timeRange, interval]) => (
+                                    <div key={timeRange} style={{ marginLeft: '10px', marginBottom: '3px' }}>
+                                        <span style={{ color: '#FFC107' }}>{timeRange}:</span>
+                                        <span style={{ color: '#E0E0E0' }}>
+                                            {Array.isArray(interval)
+                                                ? interval.map((item: any, idx: number) => (
+                                                    <div key={idx} style={{ marginLeft: '15px' }}>
+                                                        {item.station_range?.join(' → ')}: {item.time}
+                                                    </div>
+                                                ))
+                                                : String(interval)
+                                            }
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        <div style={{ marginTop: '5px' }}>
-                            {Object.entries(line.intervals).map(([timeRange, interval]) => (
-                                <div key={timeRange} style={{ marginLeft: '10px', marginBottom: '3px' }}>
-                                    <span style={{ color: '#FFC107' }}>{timeRange}:</span>
-                                    <span style={{ color: '#E0E0E0' }}>
-                                        {Array.isArray(interval)
-                                            ? interval.map((item: any, idx: number) => (
-                                                <div key={idx} style={{ marginLeft: '15px' }}>
-                                                    {item.station_range?.join(' → ')}: {item.time}
-                                                </div>
-                                            ))
-                                            : String(interval)
-                                        }
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
+                    ))
+                ) : (
+                    <div style={{ color: '#888', fontStyle: 'italic' }}>
+                        {intervalsLoading ? (
+                            <>
+                                <span style={{ color: '#FF6B6B' }}>→</span> 正在加载发车间隔数据...
+                                <br />
+                                <span style={{ fontSize: '11px', color: '#666' }}>
+                                    请稍候...
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <span style={{ color: '#FF6B6B' }}>→</span> 发车间隔数据加载失败
+                                <br />
+                                <span style={{ fontSize: '11px', color: '#666' }}>
+                                    请点击刷新按钮重试
+                                </span>
+                            </>
+                        )}
                     </div>
-                ))}
+                )}
+            </div>
+
+            {/* 标签显示控制面板 - 左下角 */}
+            <div style={{
+                position: 'absolute',
+                bottom: '20px',
+                left: '20px',
+                background: 'rgba(0, 0, 0, 0.9)',
+                color: 'white',
+                padding: '15px',
+                borderRadius: '8px',
+                maxWidth: '300px',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                zIndex: 1000
+            }}>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#4CAF50' }}>
+                    🏷️ 标签显示控制
+                </h3>
+                {metro && (() => {
+                    const config = metro.getLabelDisplayConfig();
+                    return (
+                        <div>
+                            {/* 站点标签控制 */}
+                            <div style={{ marginBottom: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                                    <span>站点标签</span>
+                                    <button 
+                                        onClick={() => {
+                                            metro.configureLabelDisplay({
+                                                stationLabels: { enabled: !config.stationLabels.enabled }
+                                            });
+                                        }}
+                                        style={{
+                                            background: config.stationLabels.enabled ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255, 0, 0, 0.3)',
+                                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                                            color: 'white',
+                                            padding: '2px 6px',
+                                            borderRadius: '3px',
+                                            fontSize: '10px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {config.stationLabels.enabled ? '开启' : '关闭'}
+                                    </button>
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#888' }}>
+                                    显示层级: ≥ {config.stationLabels.minZoom}
+                                </div>
+                            </div>
+
+                            {/* 列车标签控制 */}
+                            <div style={{ marginBottom: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                                    <span>列车标签</span>
+                                    <button 
+                                        onClick={() => {
+                                            metro.configureLabelDisplay({
+                                                vehicleLabels: { enabled: !config.vehicleLabels.enabled }
+                                            });
+                                        }}
+                                        style={{
+                                            background: config.vehicleLabels.enabled ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255, 0, 0, 0.3)',
+                                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                                            color: 'white',
+                                            padding: '2px 6px',
+                                            borderRadius: '3px',
+                                            fontSize: '10px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        {config.vehicleLabels.enabled ? '开启' : '关闭'}
+                                    </button>
+                                </div>
+                                <div style={{ fontSize: '10px', color: '#888' }}>
+                                    显示层级: ≥ {config.vehicleLabels.minZoom}
+                                </div>
+                            </div>
+
+                            {/* 快速设置 */}
+                            <div style={{ borderTop: '1px solid #333', paddingTop: '8px' }}>
+                                <div style={{ fontSize: '10px', color: '#888', marginBottom: '5px' }}>快速设置:</div>
+                                <button 
+                                    onClick={() => {
+                                        metro.configureLabelDisplay({
+                                            stationLabels: { minZoom: 8 },
+                                            vehicleLabels: { minZoom: 9 }
+                                        });
+                                    }}
+                                    style={{
+                                        background: 'rgba(255, 193, 7, 0.3)',
+                                        border: '1px solid rgba(255, 193, 7, 0.5)',
+                                        color: 'white',
+                                        padding: '3px 8px',
+                                        borderRadius: '3px',
+                                        fontSize: '10px',
+                                        cursor: 'pointer',
+                                        marginRight: '5px'
+                                    }}
+                                >
+                                    显示更多
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        metro.configureLabelDisplay({
+                                            stationLabels: { minZoom: 12 },
+                                            vehicleLabels: { minZoom: 13 }
+                                        });
+                                    }}
+                                    style={{
+                                        background: 'rgba(156, 39, 176, 0.3)',
+                                        border: '1px solid rgba(156, 39, 176, 0.5)',
+                                        color: 'white',
+                                        padding: '3px 8px',
+                                        borderRadius: '3px',
+                                        fontSize: '10px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    显示更少
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );
