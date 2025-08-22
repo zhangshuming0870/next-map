@@ -1,8 +1,1 @@
-帮我重构动画的功能 根据schedule数据进行处理,先分析public/metro/metro_schedule_data.json数据结构
-1 根据schedule数据进行遍历，每一条数据代表一条线，可能是全程或者半程的地铁
-2 根据 timetables中的timetables中的每个detail中的longitude latitude作为路径
-3 列车咋每一站的移动速度不同，取timeInterval中的 minutes-30秒 为当前所在站到下一站的速度，列车到达一站后默认停留30秒
-4 到达终点后，销毁列车销毁列车动画
-
-
 
