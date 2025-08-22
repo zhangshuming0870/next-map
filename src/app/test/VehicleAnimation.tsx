@@ -52,7 +52,6 @@ export default function VehicleAnimation() {
     const currentLatitude = currentPoint.latitude + (nextPoint.latitude - currentPoint.latitude) * progress;
 
     // 路径图层
-    console.log(vehiclePath)
     const pathLayer = new LineLayer({
         id: 'path',
         data: [vehiclePath],

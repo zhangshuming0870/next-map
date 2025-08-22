@@ -15,7 +15,6 @@ export default class StationLayer extends CompositeLayer<StationLayerProps> {
 
     renderLayers() {
         const { iconAtlas, getColor, linePaths = [] } = this.props;
-        console.log(linePaths);
         const pathLayers = linePaths.map(line => new PathLayer({
             ...this.getSubLayerProps({ id: `path-${line.name}` }),
             data: [line.stations],

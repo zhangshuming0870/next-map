@@ -1,6 +1,7 @@
 import { MetroLineData, MetroStationData } from './types';
 import StationLayer from './StationLayer';
 import { PathLayer, SolidPolygonLayer, TextLayer } from '@deck.gl/layers';
+import { fetchMetroData, validateResponseData } from './dataClient';
 
 
 
@@ -58,8 +59,6 @@ export default class Metro {
     }
 
     private buildAnimate() {
-        console.log('schedule', this.schedule);
-        console.log('lineIntervals', this.lineIntervals);
         if (Array.isArray(this.lineIntervals)) {
             for (const li of this.lineIntervals) {
                 const lineNo = Number(li?.lineNo);
@@ -206,8 +205,7 @@ export default class Metro {
     }
 
     private async getStationTimeInterval(): Promise<void> {
-        const response = await fetch('/metro/interval.json');
-        const data = await response.json();
+        const data = await fetchMetroData('intervals');
 
         //先找出所有线路中最长的线路
         let newSchedule: { [key: string]: any } = {};
@@ -219,8 +217,6 @@ export default class Metro {
                 newSchedule[line.lineNo] = line;
             }
         })
-        console.log(newSchedule);
-
         data.forEach((d: any) => {
             Object.values(newSchedule).forEach((ld: any) => {
                 if (d.line === ld.lineNo) {
@@ -264,8 +260,6 @@ export default class Metro {
 
         })
         this.stationTimeInterval = data;
-        console.log('处理好的interval信息', this.stationTimeInterval);
-        console.log('用于简化interval信息', this.lineUpdateTimes)
     }
 
     animateSpeedReload(lineTime: any): void {
@@ -409,11 +403,12 @@ export default class Metro {
 
     private async getData(): Promise<any[]> {
         try {
-            const response = await fetch('/metro/shanghai_metro.json');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            const data = await fetchMetroData('lines');
+            
+            if (!validateResponseData(data, 'lines')) {
+                throw new Error('Invalid lines data structure');
             }
-            const data = await response.json();
+            
             return data.lines;
         } catch (error) {
             console.error('Failed to fetch metro data:', error);
@@ -423,14 +418,9 @@ export default class Metro {
 
     private async getScheduleData(): Promise<any> {
         try {
-            const response = await fetch('/metro/shanghai_metro_schedule.json');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const data = await response.json();
-
-            // 验证数据结构
-            if (!data || !Array.isArray(data.lines)) {
+            const data = await fetchMetroData('schedule');
+            
+            if (!validateResponseData(data, 'schedule')) {
                 throw new Error('Invalid schedule data structure');
             }
 
